@@ -1,0 +1,111 @@
+---
+description: Domain model file conventions (db_models, domain, dto, exceptions)
+globs: backend/app/**/db_models.py,backend/app/**/domain.py,backend/app/**/dto.py,backend/app/**/exceptions.py
+alwaysApply: false
+---
+
+# Domain Models
+
+## Four-File Pattern per Domain
+
+| File | Contains | Example |
+|------|----------|---------|
+| `db_models.py` | SQLAlchemy ORM + enums + S3 key generators + properties | `class OrderModel(Base)` |
+| `domain.py` | Pydantic request models with validators | `class CreateOrderRequest(BaseModel)` |
+| `dto.py` | Pydantic response models (`from_attributes=True`) | `class OrderDTO(BaseModel)` |
+| `exceptions.py` | Domain-specific exceptions | `class OrderNotFoundError(OrderError)` |
+
+---
+
+## `exceptions.py` — required in every domain
+
+```python
+class ExampleError(Exception):
+    """Base exception for example_domain."""
+
+class ExampleNotFoundError(ExampleError):
+    """Entity not found."""
+
+class ExampleForbiddenError(ExampleError):
+    """Caller lacks permission."""
+```
+
+Routes import and handle these; UseCases raise them.
+
+---
+
+## `db_models.py` Rules
+
+```python
+class OrderModel(Base):
+    __tablename__ = "orders"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[OrderStatus] = mapped_column(String(50), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    files: Mapped[list["OrderFileModel"]] = relationship("OrderFileModel", back_populates="order", lazy="selectin")
+
+    # ✅ Indexes, constraints, checks in __table_args__ — not inline index=True
+    __table_args__ = (
+        Index("ix_orders_user_id", "user_id"),
+        Index("ix_orders_status", "status"),
+        Index("ix_orders_user_id_status", "user_id", "status"),
+        CheckConstraint("status IN ('new','done','failed')", name="ck_orders_status"),
+    )
+
+    # Properties that aggregate relationship data
+    @property
+    def done_files(self) -> list["OrderFileModel"]:
+        return [f for f in self.files if f.status == "done"]
+
+    @property
+    def has_pending_uploads(self) -> bool:
+        return any(f.status == "pending" for f in self.files)
+
+    # S3 key generator on the file model
+    @classmethod
+    def generate_s3_key(cls, order_id: uuid.UUID, filename: str) -> str:
+        from backend.storage.s3.client import sanitize_key_segment
+        return f"orders/{order_id}/{uuid.uuid4()}/{sanitize_key_segment(filename)}"
+```
+
+**Key rules:**
+- Never `index=True` inline — use `__table_args__` with explicit `Index()`
+- All timestamps: `server_default=func.now()`, `timezone=True`
+- Enums defined in `db_models.py`, imported in `domain.py` and `dto.py`
+- S3 key generator: classmethod on the file model
+- `ForeignKey` always with `ondelete="CASCADE"` for child records
+
+---
+
+## `domain.py` Rules
+
+```python
+class CreateOrderRequest(BaseModel):
+    title: str = Field(..., min_length=1, max_length=255)
+
+    @field_validator("title")
+    @classmethod
+    def strip_whitespace(cls, v: str) -> str:
+        return v.strip()
+```
+
+---
+
+## `dto.py` Rules
+
+```python
+class OrderDTO(BaseModel):
+    model_config = ConfigDict(from_attributes=True)  # Required for ORM → DTO
+
+    id: UUID
+    title: str
+    status: OrderStatus
+    created_at: datetime
+    files: list[OrderFileDTO] = []
+    download_url: str | None = None  # Enriched by UseCase, not stored in DB
+```

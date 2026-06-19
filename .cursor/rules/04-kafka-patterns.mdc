@@ -1,0 +1,79 @@
+---
+description: Kafka producer/consumer patterns for external service operations
+globs: backend/shared/kafka_streams/**/*.py
+alwaysApply: false
+---
+
+# Kafka Patterns
+
+## Rule: All S3 writes/deletes go through Kafka
+
+```
+# ✅ Correct
+UseCase → publish_s3_upload() → Kafka → Consumer → S3
+
+# ❌ Wrong — synchronous S3 in request context
+await s3_client.put_object(...)  # do NOT call in UseCase
+```
+
+## Adding a New File Type
+
+### 1. Add topic to `topics.py`
+
+```python
+class StorageTopics:
+    MY_ENTITY_UPLOAD = "storage.s3.my_entity.upload"
+    MY_ENTITY_DELETE = "storage.s3.my_entity.delete"
+
+S3_CONSUMER_TOPICS = [
+    ...
+    StorageTopics.MY_ENTITY_UPLOAD,
+    StorageTopics.MY_ENTITY_DELETE,
+]
+```
+
+### 2. Add consumer in `subscribers/s3.py`
+
+```python
+@kafka_subscriber(StorageTopics.MY_ENTITY_UPLOAD)
+async def run_my_entity_upload_consumer(s3_client: S3Client, payload: dict) -> None:
+    event = S3UploadEvent(**payload)
+    body = base64.b64decode(event.content_base64)
+    await s3_client.put_object(event.key, body, event.content_type, event.metadata)
+    # Optionally update DB status here
+```
+
+### 3. Import in `subscribers/__init__.py`
+
+```python
+from backend.shared.kafka_streams.subscribers import my_new_module  # noqa: F401
+```
+
+### 4. Call from UseCase
+
+```python
+await publish_s3_upload(
+    self.kafka_producer,
+    StorageTopics.MY_ENTITY_UPLOAD,
+    key=s3_key,
+    body=payload,
+    content_type=content_type,
+    metadata={"entity_id": str(entity_id)},
+    original_filename=filename,
+)
+```
+
+## Topic Naming Convention
+
+`<domain>.<entity>.<action>` — all lowercase, dots as separators
+
+Examples:
+- `storage.s3.avatar.upload`
+- `storage.s3.document.delete`
+- `notification.email.send`
+- `billing.invoice.generate`
+
+## Error Handling in Consumers
+
+Consumer logs the error and sleeps before retrying.  
+For critical operations — add DLQ (Dead Letter Queue) topic.

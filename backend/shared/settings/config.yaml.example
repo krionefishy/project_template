@@ -1,0 +1,53 @@
+# ============================================================
+# Application configuration template
+# Copy to config.yaml and fill in values for local development
+# Secrets (passwords, keys) should not be committed — use .env overrides
+#
+# Local:  ENV=local   CONFIG_PATH=backend/shared/settings/config.yaml just dev
+# Tests:  ENV=test    CONFIG_PATH=backend/shared/settings/config.test.yaml just test
+# Prod:   ENV=prod    CONFIG_PATH=backend/shared/settings/config.prod.yaml
+# ============================================================
+
+environment: development
+log_level: INFO
+
+app:
+  host: "0.0.0.0"
+  port: 8000
+  workers: 1
+  service_name: "my-service"  # CHANGE: your service name
+
+database:
+  url: "postgresql+asyncpg://user:password@localhost:5432/app_db"  # CHANGE
+  echo: false  # true to log all SQL in dev
+
+redis:
+  host: "localhost"  # Docker: redis
+  port: 6379
+  password: null     # CHANGE for production
+  db: 0
+
+kafka:
+  bootstrap_servers: "localhost:9092"  # Docker: kafka:9092
+  consumer_group: "app-group"          # CHANGE: unique per service
+  max_request_size: 10485760           # 10 MB
+
+s3:
+  endpoint_url: "https://storage.yandexcloud.net"  # CHANGE: Yandex / Cloud.ru / AWS endpoint
+  key_id: ""       # CHANGE: your access key id
+  secret_key: ""   # CHANGE: your secret key
+  bucket_name: "app-bucket"  # CHANGE: your bucket name
+  region: "ru-central-1"
+  tenant_id: ""    # CHANGE: Yandex Cloud / Cloud.ru tenant id (leave empty for AWS)
+  verify: true
+
+jwt:
+  secret: "change-me-in-production"      # CHANGE: openssl rand -hex 32
+  algorithm: "HS256"
+  access_expire_seconds: 900             # 15 min
+  refresh_expire_seconds: 2592000        # 30 days
+  rsa_private_key_pem: null             # PEM string for RSA; null = load from file or generate
+
+rsa:
+  enabled: true                          # false if this project does not use RSA password encryption
+  private_key_path: "keys/private.pem"  # CHANGE: path relative to project root

@@ -1,0 +1,47 @@
+# Production configuration
+# All secrets injected via environment variables — never hardcode here
+# Env overrides: DATABASE_URL, KAFKA_BOOTSTRAP_SERVERS, JWT_SECRET
+
+environment: production
+log_level: INFO
+
+app:
+  host: "0.0.0.0"
+  port: 8000
+  workers: 4          # CHANGE: set to CPU core count
+  service_name: "my-service"  # CHANGE
+
+database:
+  url: "postgresql+asyncpg://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}"
+  echo: false
+
+redis:
+  host: "redis"
+  port: 6379
+  password: "${REDIS_PASSWORD}"
+  db: 0
+
+kafka:
+  bootstrap_servers: "kafka:9092"
+  consumer_group: "app-group"  # CHANGE
+  max_request_size: 10485760
+
+s3:
+  endpoint_url: "${S3_ENDPOINT_URL}"
+  key_id: "${S3_KEY_ID}"
+  secret_key: "${S3_SECRET_KEY}"
+  bucket_name: "${S3_BUCKET_NAME}"
+  region: "${S3_REGION}"
+  tenant_id: "${S3_TENANT_ID}"
+  verify: true
+
+jwt:
+  secret: "${JWT_SECRET}"
+  algorithm: "HS256"
+  access_expire_seconds: 900
+  refresh_expire_seconds: 2592000
+  rsa_private_key_pem: "${RSA_PRIVATE_KEY_PEM}"  # or null to load from file
+
+rsa:
+  enabled: true   # CHANGE: false if not using RSA password encryption
+  private_key_path: "/app/keys/private.pem"

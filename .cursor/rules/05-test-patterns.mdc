@@ -1,0 +1,139 @@
+---
+description: Test patterns - Builder class, conftest, mocks, naming
+globs: backend/tests/**/*.py
+alwaysApply: false
+---
+
+# Test Patterns
+
+## Builder — dedicated class, never static fixtures
+
+The `Builder` is a **class** (not a collection of functions or fixtures) instantiated per test with the test `AsyncSession`. It owns all entity creation logic.
+
+```python
+# builder.py
+class Builder:
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def build_order(
+        self,
+        *,
+        title: str = "Test Order",
+        status: OrderStatus = OrderStatus.NEW,
+        user_id: UUID | None = None,
+    ) -> OrderModel:
+        result = await self.session.execute(
+            insert(OrderModel)
+            .values(id=uuid.uuid4(), title=title, status=status, user_id=user_id or uuid.uuid4())
+            .returning(OrderModel)
+        )
+        order = result.scalar_one()
+        await self.session.flush()
+        return order
+
+    async def build_order_file(self, *, order_id: UUID, status: FileStatus = FileStatus.DONE) -> OrderFileModel:
+        ...
+
+    # Cached default — created once per test
+    @cached_property
+    async def default_order(self) -> OrderModel:
+        return await self.build_order(title="Default Order")
+```
+
+```python
+# ❌ Never — static fixture with hardcoded data
+@pytest.fixture
+def order():
+    return {"id": "...", "title": "test"}
+
+# ✅ Always — Builder in test
+async def test_get_order(client, builder, bearer_headers):
+    order = await builder.build_order(title="My Order", status=OrderStatus.NEW)
+    response = await client.get(f"/api/v1/orders/{order.id}", headers=bearer_headers())
+    assert response.status_code == 200
+    assert response.json()["title"] == "My Order"
+```
+
+## Test Naming Convention
+
+`test_returns_<STATUS>_when_<CONDITION>`
+
+```python
+async def test_returns_200_when_order_exists(...)
+async def test_returns_404_when_order_not_found(...)
+async def test_returns_403_when_user_lacks_permission(...)
+async def test_returns_200_when_file_queued_for_s3_upload(...)  # not 202
+```
+
+## Test Organization (classes per endpoint/usecase)
+
+```python
+class TestGetOrder:
+    async def test_returns_200_when_order_exists(self, client, builder, bearer_headers): ...
+    async def test_returns_404_when_order_not_found(self, client, bearer_headers): ...
+
+class TestCreateOrder:
+    async def test_returns_201_on_success(self, client, bearer_headers): ...
+    async def test_returns_422_when_title_empty(self, client, bearer_headers): ...
+```
+
+## Asserting Kafka (FakeKafkaBroker API)
+
+```python
+# FakeKafkaBroker is injected into DI container at session scope
+messages = fake_kafka.get_messages_for_topic("storage.s3.order.upload")
+assert len(messages) == 1
+
+# Predicate-based assertion
+assert fake_kafka.was_message_published(
+    "storage.s3.order.upload",
+    predicate=lambda m: m.get("content_type") == "application/pdf",
+)
+fake_kafka.clear_published()  # reset between subtests if needed
+```
+
+## Asserting S3 (MockS3Client API)
+
+```python
+assert mock_s3.was_operation_performed("put_object", key="examples/...")
+assert mock_s3.get_uploaded_content("my/key") == b"expected bytes"
+put_ops = mock_s3.get_operations_by_type("put_object")
+```
+
+## conftest isolation mechanism
+
+```
+Each test:
+  connection.begin()                         ← outer transaction
+    AsyncSession(join_transaction_mode=      ← UseCase's session.commit()
+      "create_savepoint")                       creates a SAVEPOINT, not a real commit
+    _current_db_session.set(session)         ← TestSessionProvider reads this
+    [test runs here]
+  transaction.rollback()                     ← outer transaction rolls back → DB clean
+```
+
+## Rules
+
+- No real Kafka, S3, Redis calls in tests — FakeKafkaBroker / MockS3Client / MockRefreshTokenStore
+- Each test is isolated via `join_transaction_mode="create_savepoint"` (not `begin_nested`)
+- One test file per endpoint or use case
+- `bearer_headers(role="admin")` — factory from conftest, creates valid JWT
+- Group related tests in classes, not loose functions
+
+---
+
+# shared/ — What Belongs There
+
+`backend/shared/` contains code used by **multiple domains** or at the **application level**. Never put domain-specific logic here.
+
+| Location | Content |
+|----------|---------|
+| `shared/settings/` | App config dataclasses, YAML loaders, `load_settings()` |
+| `shared/di/` | Dishka providers — `AppProvider`, `SessionProvider`, domain providers |
+| `shared/kafka_streams/` | `KafkaProducerWrapper`, `@kafka_subscriber`, topics, S3 event helpers |
+| `storage/pg/` | `Database`, `Base` — one engine for all domains |
+| `storage/redis/` | `RedisClient` — shared cache/session store |
+| `storage/s3/` | `S3Client` — used by Kafka consumers |
+
+Single-domain code stays in `backend/app/<domain>/`. Cross-domain utilities (pagination helpers, date utils, etc.) go to `shared/utils/`.

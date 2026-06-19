@@ -1,0 +1,113 @@
+---
+description: FastAPI route conventions with Dishka DI and domain exceptions
+globs: backend/app/**/api/routes.py
+alwaysApply: false
+---
+
+# API Routes
+
+## Required Router Setup
+
+```python
+from dishka.integrations.fastapi import DishkaRoute, FromDishka
+from fastapi import APIRouter
+
+router = APIRouter(
+    prefix="/entities",
+    tags=["entities"],
+    route_class=DishkaRoute,  # Required for FromDishka to work
+)
+```
+
+## Route Template — no try/except needed for domain errors
+
+`AppError` subclasses are caught globally in `application.py` → JSONResponse.
+Routes stay thin: call UseCase, return DTO. That's it.
+
+```python
+@router.get("/{entity_id}", response_model=EntityDTO)
+async def get_entity(
+    entity_id: UUID,
+    auth: Annotated[AuthContext, Depends(require_auth)],
+    usecase: FromDishka[GetEntityUseCase],
+) -> EntityDTO:
+    return await usecase.execute(entity_id, auth)
+    # EntityNotFoundError(status_code=404) → handled by global AppError handler
+    # EntityForbiddenError(status_code=403) → handled by global AppError handler
+```
+
+## HTTP Status Codes
+
+| Operation | Status |
+|-----------|--------|
+| GET success | 200 |
+| POST create | 201 |
+| File queued to Kafka → S3 | 200 (not 202) |
+| Not found (domain exception) | 404 |
+| Forbidden (domain exception) | 403 |
+| Auth missing/invalid | 401 (auto via require_auth) |
+| Business conflict | 409 |
+| Unsupported media type | 415 |
+
+## Domain Exceptions Pattern
+
+`shared/exceptions.py` defines `AppError` with `status_code` + `detail`.
+Every domain has `exceptions.py` extending it. Global handler in `application.py` converts all `AppError` → JSON.
+
+```python
+# shared/exceptions.py
+class AppError(Exception):
+    status_code: int = 500
+    detail: str = "Internal error"
+    def __init__(self, detail=None, *, status_code=None): ...
+
+# example_domain/exceptions.py
+from backend.shared.exceptions import AppError
+
+class ExampleError(AppError): ...
+
+class ExampleNotFoundError(ExampleError):
+    status_code = 404
+    detail = "Example not found"
+
+class ExampleForbiddenError(ExampleError):
+    status_code = 403
+    detail = "Forbidden"
+
+# UseCase raises with class defaults or custom message:
+raise ExampleNotFoundError()                        # → 404 "Example not found"
+raise ExampleNotFoundError("Example 123 not found") # → 404 "Example 123 not found"
+
+# Route — no try/except:
+@router.get("/{id}", response_model=ExampleDTO)
+async def get_example(id: UUID, ...) -> ExampleDTO:
+    return await usecase.execute(id, auth)
+```
+
+## File Upload Route
+
+```python
+@router.post("/{id}/files", response_model=FileDTO, status_code=200)
+async def upload_file(
+    id: UUID,
+    auth: Annotated[AuthContext, Depends(require_auth)],
+    usecase: FromDishka[UploadFileUseCase],
+    file: UploadFile = File(...),
+) -> FileDTO:
+    """
+    Upload a file. Returns 200 with status=PENDING.
+    File is queued for S3 upload via Kafka. Poll GET /{id} for status updates.
+    """
+    payload = await file.read()
+    try:
+        return await usecase.execute(id, file.filename, file.content_type, payload, auth)
+    except EntityNotFoundError:
+        raise HTTPException(status_code=404, detail="Not found")
+```
+
+## Rules
+
+- `route_class=DishkaRoute` always on the router, not on individual routes
+- Catch domain exceptions in routes — never check `if result is None`
+- `response_model=` always specified for type-safe OpenAPI docs
+- Role checks via `Depends(require_auth)` + domain exception from UseCase

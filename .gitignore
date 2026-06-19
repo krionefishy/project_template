@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Virtual environments (uv creates .venv automatically)
+.venv/
+venv/
+env/
+ENV/
+
+# Config with secrets (never commit)
+.env
+backend/shared/settings/config.yaml
+backend/shared/settings/config.production.yaml
+backend/keys/
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker volumes (if mounted locally)
+pg_data/
+redis_data/
+minio_data/

@@ -1,0 +1,65 @@
+---
+description: Core project architecture - FastAPI + Dishka + UseCase pattern
+alwaysApply: true
+---
+
+# Project Architecture
+
+## Stack
+
+- **FastAPI** + **Dishka** DI + **SQLAlchemy async** + **Kafka** + **Redis** + **S3** (Yandex/MinIO)
+- Python 3.12+, async everywhere
+
+## Layer Flow
+
+```
+HTTP Request
+  → FastAPI Router (validation only)
+  → UseCase.execute() (business logic + DB)
+  → SQLAlchemy AsyncSession (no raw SQL, no repository layer)
+  → HTTP Response
+```
+
+External write/delete operations (S3, email, billing):
+```
+UseCase → DB (status=PENDING) → Kafka publish → Consumer → External API → DB (status=DONE)
+```
+
+## Domain Structure
+
+Each domain folder in `backend/app/<domain>/`:
+
+```
+<domain>/
+  db_models.py     # SQLAlchemy ORM only
+  domain.py        # Pydantic request models
+  dto.py           # Pydantic response models
+  api/routes.py    # FastAPI router, no business logic
+  usecases/        # One file = one UseCase class
+```
+
+## Core Rules
+
+- No raw SQL — SQLAlchemy query builder only: `select()`, `insert().values().returning()`, `update()`, `delete()`
+- No `session.add()` / `session.refresh()` — use `insert().values().returning()` for creates
+- No repository pattern — UseCase works directly with AsyncSession
+- No business logic in routes — routes call UseCase, domain exceptions flow to global handler
+- S3 writes/deletes only via Kafka events (never synchronous in request)
+- `AuthContext` is a Pydantic `BaseModel`, provided per-request by Dishka `AuthContextProvider`
+- Dishka DI with `Scope.APP` for infra, `Scope.REQUEST` for session + usecases + AuthContext
+- Config via YAML files + env overrides for secrets
+- Package manager: **uv** (`uv sync`, `uv add`, `uv run`)
+- Every action has a `just` command — nothing run manually
+
+## Exception Hierarchy
+
+```
+AppError (shared/exceptions.py)          ← status_code + detail on the class
+  └── ExampleError (example_domain)
+        ├── ExampleNotFoundError         status_code=404
+        ├── ExampleForbiddenError        status_code=403
+        └── ExampleFileUploadError       status_code=503
+```
+
+Global handler in `Application._setup_exception_handlers()` converts any `AppError` → `JSONResponse`.
+Routes need no `try/except` for domain errors.

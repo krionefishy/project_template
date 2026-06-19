@@ -1,0 +1,96 @@
+---
+description: Step-by-step checklist for adding a new domain to the project
+alwaysApply: false
+---
+
+# New Domain Checklist
+
+When adding a new domain `<domain>` (e.g., `orders`, `reports`, `users`):
+
+## 1. Create domain folder
+
+```
+backend/app/<domain>/
+  __init__.py
+  db_models.py         # ORM models
+  domain.py            # Request Pydantic models
+  dto.py               # Response Pydantic models
+  api/
+    __init__.py
+    routes.py          # FastAPI router with DishkaRoute
+    index.md
+  usecases/
+    __init__.py
+    get_<domain>_usecase.py
+    create_<domain>_usecase.py
+    # add upload_<domain>_file_usecase.py if files needed
+    index.md
+  index.md
+```
+
+## 2. Register ORM models for migrations
+
+In `backend/migrations/env.py`:
+```python
+from backend.app.<domain>.db_models import <Domain>Model  # noqa: F401
+```
+
+Then: `just db-create-migration "add <domain> tables"` + `just db-migrate`
+
+## 3. Create Dishka provider
+
+Create `backend/shared/di/providers/<domain>.py`:
+```python
+from dishka import Provider, Scope, provide
+from backend.app.<domain>.usecases.create_<domain>_usecase import Create<Domain>UseCase
+
+class <Domain>Provider(Provider):
+    scope = Scope.REQUEST
+    create_<domain> = provide(Create<Domain>UseCase)
+```
+
+Add to `backend/shared/di/providers/provider.py`:
+```python
+from backend.shared.di.providers.<domain> import <Domain>Provider
+ALL_PROVIDERS = [..., <Domain>Provider()]
+```
+
+## 4. Register API router
+
+In `backend/app/api/router.py`:
+```python
+from backend.app.<domain>.api.routes import router as <domain>_router
+api_router.include_router(<domain>_router)
+```
+
+## 5. Add Kafka topics (if files involved)
+
+In `shared/kafka_streams/topics.py` — add upload/delete topics.  
+In `subscribers/s3.py` — add `@kafka_subscriber` handlers.  
+In `subscribers/__init__.py` — import new subscriber module.
+
+## 6. Add Builder methods
+
+In `backend/tests/builder.py`:
+```python
+async def build_<domain>(self, *, field: str = "default") -> <Domain>Model:
+    ...
+```
+
+## 7. Create test folder
+
+```
+backend/tests/<domain>/
+  __init__.py
+  test_api_get_<domain>.py
+  test_api_create_<domain>.py
+  test_upload_<domain>_file_usecase.py  # if files
+```
+
+## 8. Verify everything works
+
+```bash
+just db-migrate
+just lint
+just test
+```

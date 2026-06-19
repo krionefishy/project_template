@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "backend/**"
+      - "pyproject.toml"
+      - "pytest.ini"
+      - "alembic.ini"
+      - "justfile"
+      - "just/**"
+      - ".github/workflows/ci.yaml"
+      - "deploy/docker-compose.ci.yml"
+  pull_request:
+    branches: ["main", "dev"]
+    paths:
+      - "backend/**"
+      - "pyproject.toml"
+      - "pytest.ini"
+      - "alembic.ini"
+      - "justfile"
+      - "just/**"
+      - ".github/workflows/ci.yaml"
+      - "deploy/docker-compose.ci.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql+asyncpg://app:secret@localhost:5432/app_test_db
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Install just
+        uses: extractions/setup-just@v2
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Start PostgreSQL
+        run: |
+          docker compose -f deploy/docker-compose.ci.yml up -d
+          timeout 30s bash -c 'until docker compose -f deploy/docker-compose.ci.yml exec -T db pg_isready -U app; do sleep 2; done'
+
+      - name: Apply migrations
+        run: just ci-migrate
+
+      - name: Run linter
+        run: just lint
+
+      - name: Run tests
+        run: just ci-test
+
+      - name: Stop PostgreSQL
+        if: always()
+        run: docker compose -f deploy/docker-compose.ci.yml down --remove-orphans
