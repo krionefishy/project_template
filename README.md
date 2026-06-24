@@ -68,7 +68,7 @@ just deploy-up    # production stack
 See `.cursor/rules/06-new-domain-checklist.mdc` for the full checklist.
 
 Quick summary:
-1. Create `backend/app/<domain>/` with `db_models.py`, `domain.py`, `dto.py`, `api/routes.py`, `usecases/`
+1. Create `backend/app/<domain>/` with `db_models.py`, `schemas/domain.py`, `schemas/dto.py`, `api/routes.py`, `usecases/`
 2. Import ORM models in `migrations/env.py`, run `just db-create-migration`
 3. Create `shared/di/providers/<domain>.py`, add to `provider.py`
 4. Add router to `app/api/router.py`

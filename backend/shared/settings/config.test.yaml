@@ -1,10 +1,5 @@
-# Test configuration — used by pytest
-# DATABASE_URL env var overrides database.url (for CI / parallel workers)
-
-environment: test
-log_level: WARNING
-
 app:
+  log_level: "WARNING"
   service_name: "app-test"
 
 database:
@@ -33,10 +28,10 @@ s3:
   # S3 is mocked in tests via MockS3Client — these values are not used
 
 jwt:
-  secret: "test-secret-key-do-not-use-in-production"
+  secret_key: "test-secret-key-do-not-use-in-production"
   algorithm: "HS256"
-  access_expire_seconds: 3600
-  refresh_expire_seconds: 604800
+  access_token_expire_minutes: 60
+  refresh_token_expire_days: 7
   rsa_private_key_pem: null
 
 rsa:

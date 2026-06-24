@@ -11,14 +11,13 @@ import logging
 import uuid
 from pathlib import Path
 from threading import Lock
-from typing import Optional
 
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPublicKey
 from passlib.context import CryptContext
 
-from backend.shared.settings.config import Settings
+from backend.shared.config import Settings
 from backend.storage.redis.client import RedisClient
 
 logger = logging.getLogger("auth")
@@ -36,8 +35,8 @@ class RsaKeyProvider:
 
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
-        self._private_key: Optional[RSAPrivateKey] = None
-        self._public_key_pem: Optional[str] = None
+        self._private_key: RSAPrivateKey | None = None
+        self._public_key_pem: str | None = None
         self._lock = Lock()
 
     def _ensure_loaded(self) -> None:
@@ -46,19 +45,20 @@ class RsaKeyProvider:
         with self._lock:
             if self._private_key is not None:
                 return
-            # Priority: PEM string from config → file → ephemeral
             pem_string = self._settings.jwt.rsa_private_key_pem
             if pem_string:
-                self._private_key = serialization.load_pem_private_key(
-                    pem_string.encode(), password=None
-                )
+                loaded_key = serialization.load_pem_private_key(pem_string.encode(), password=None)
+                if not isinstance(loaded_key, RSAPrivateKey):
+                    raise TypeError("RSA private key PEM is required")
+                self._private_key = loaded_key
                 logger.info("RSA private key loaded from config (PEM string)")
             else:
                 key_path = Path(self._settings.rsa.private_key_path)
                 if key_path.exists():
-                    self._private_key = serialization.load_pem_private_key(
-                        key_path.read_bytes(), password=None
-                    )
+                    loaded_key = serialization.load_pem_private_key(key_path.read_bytes(), password=None)
+                    if not isinstance(loaded_key, RSAPrivateKey):
+                        raise TypeError(f"RSA private key expected in {key_path}")
+                    self._private_key = loaded_key
                     logger.info("RSA private key loaded from %s", key_path)
                 else:
                     logger.warning(
@@ -69,7 +69,8 @@ class RsaKeyProvider:
                     self._private_key = rsa.generate_private_key(
                         public_exponent=65537, key_size=2048
                     )
-            pub: RSAPublicKey = self._private_key.public_key()  # type: ignore[assignment]
+            assert self._private_key is not None
+            pub: RSAPublicKey = self._private_key.public_key()
             self._public_key_pem = pub.public_bytes(
                 encoding=serialization.Encoding.PEM,
                 format=serialization.PublicFormat.SubjectPublicKeyInfo,
@@ -103,8 +104,6 @@ class PasswordService:
 
 
 class RefreshTokenStore:
-    """Store refresh tokens in Redis with TTL."""
-
     PREFIX = "refresh_token:"
 
     def __init__(self, redis: RedisClient, settings: Settings) -> None:

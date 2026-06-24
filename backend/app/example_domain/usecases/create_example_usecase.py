@@ -6,9 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.auth.deps import AuthContext
 from backend.app.example_domain.db_models import ExampleModel
-from backend.app.example_domain.domain import CreateExampleRequest
-from backend.app.example_domain.dto import ExampleDTO
 from backend.app.example_domain.exceptions import ExampleForbiddenError
+from backend.app.example_domain.schemas.domain import CreateExampleRequest
+from backend.app.example_domain.schemas.dto import ExampleDTO
 
 logger = logging.getLogger(__name__)
 

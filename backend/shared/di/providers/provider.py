@@ -11,16 +11,11 @@ from backend.shared.di.providers.auth import AuthContextProvider, AuthProvider, 
 from backend.shared.di.providers.example_domain import ExampleDomainProvider
 
 ALL_PROVIDERS: list[Provider] = [
-    # Infrastructure (APP scope)
     AppProvider(),
-    # Framework integration
     FastapiProvider(),
-    # Auth: APP-scope services + per-request AuthContext + REQUEST-scope usecases
     AuthProvider(),
     AuthContextProvider(),
     AuthUsecaseProvider(),
-    # --- Add domain providers below ---
     ExampleDomainProvider(),
-    # SessionProvider is always last so AsyncSession resolves after all others
     SessionProvider(),
 ]

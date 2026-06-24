@@ -73,11 +73,10 @@ class MockS3Client(S3Client):
 
     def was_operation_performed(self, operation: str, key: str | None = None) -> bool:
         """Return True if the operation was performed, optionally filtered by key."""
-        for op in self.operations:
-            if op.get("operation") == operation:
-                if key is None or op.get("key") == key:
-                    return True
-        return False
+        return any(
+            op.get("operation") == operation and (key is None or op.get("key") == key)
+            for op in self.operations
+        )
 
     def clear_all(self) -> None:
         self.operations.clear()

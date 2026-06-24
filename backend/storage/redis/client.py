@@ -1,5 +1,5 @@
 import logging
-from typing import Optional
+from typing import cast
 
 import redis.asyncio as redis
 
@@ -14,14 +14,14 @@ class RedisClient:
         host: str,
         port: int = 6379,
         db: int = 0,
-        password: Optional[str] = None,
+        password: str | None = None,
         decode_responses: bool = True,
     ):
         self.host = host
         self.port = port
         self.db = db
         self.password = password
-        self._client: Optional[redis.Redis] = None
+        self._client: redis.Redis | None = None
         self._decode_responses = decode_responses
 
     async def connect(self) -> None:
@@ -45,12 +45,12 @@ class RedisClient:
             await self._client.close()
             logger.info("Redis disconnected")
 
-    async def get(self, key: str) -> Optional[str]:
+    async def get(self, key: str) -> str | None:
         if not self._client:
             return None
-        return await self._client.get(key)
+        return cast(str | None, await self._client.get(key))
 
-    async def set(self, key: str, value: str, expire: Optional[int] = None) -> None:
+    async def set(self, key: str, value: str, expire: int | None = None) -> None:
         if not self._client:
             return
         await self._client.set(key, value, ex=expire)

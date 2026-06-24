@@ -5,28 +5,28 @@ Rules:
 - Use Mapped[T] + mapped_column() for all columns
 - All timestamps: server_default=func.now(), timezone=True
 - Never inline index=True — use explicit Index() in __table_args__
-- Enums defined here, imported in domain.py and dto.py
+- Enums defined here, imported in schemas/domain.py and schemas/dto.py
 - S3 key generator: classmethod on the file model
 - Properties return derived/aggregated data from relationships
 - Rename 'example_domain' to your actual domain name everywhere
 """
 import uuid
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String, Text, UniqueConstraint, func
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.storage.pg.database import Base
 
 
-class ExampleStatus(str, Enum):
+class ExampleStatus(StrEnum):
     ACTIVE = "active"
     ARCHIVED = "archived"
 
 
-class FileStatus(str, Enum):
+class FileStatus(StrEnum):
     PENDING = "pending"
     DONE = "done"
     FAILED = "failed"

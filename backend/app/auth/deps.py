@@ -10,7 +10,7 @@ Add project-specific role functions below (see examples at bottom).
 from fastapi import HTTPException, Request, status
 from pydantic import BaseModel
 
-from backend.shared.settings.config import Settings
+from backend.shared.config import Settings
 
 
 class AuthContext(BaseModel):
@@ -22,15 +22,6 @@ async def build_auth_context(
     request: Request,
     settings: Settings,
 ) -> AuthContext:
-    """
-    Parse and validate the Bearer token from the request.
-    Called by Dishka AuthContextProvider on every protected request.
-
-    Replace this implementation with your actual token validation logic:
-    - Decode JWT using settings.jwt.secret_key
-    - Look up user in DB via AsyncSession if needed
-    - Raise HTTPException(401) on any failure
-    """
     from fastapi.security.utils import get_authorization_scheme_param
     from jose import JWTError, jwt
 

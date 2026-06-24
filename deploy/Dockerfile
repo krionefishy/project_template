@@ -1,54 +1,52 @@
-# ============================================================
-# Backend Dockerfile — uses uv for dependency management
-# ============================================================
+# syntax=docker/dockerfile:1.7
+ARG PYTHON_VERSION=3.12
+ARG UV_VERSION=0.5.11
 
-FROM python:3.12-slim AS builder
+FROM python:${PYTHON_VERSION}-slim AS builder
 
 WORKDIR /app
 
-# Install uv
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=never
 
-# System deps for asyncpg, cryptography
+COPY --from=ghcr.io/astral-sh/uv:${UV_VERSION} /uv /uvx /usr/local/bin/
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential libpq-dev && \
     rm -rf /var/lib/apt/lists/*
 
-# Install dependencies using uv (respects uv.lock for reproducibility)
 COPY pyproject.toml uv.lock* ./
-RUN uv sync --frozen --no-dev --no-install-project
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --no-install-project
 
 
-FROM python:3.12-slim AS runner
+FROM python:${PYTHON_VERSION}-slim AS runner
 
 WORKDIR /app
 
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/app/.venv/bin:$PATH"
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq-dev && \
+    libpq5 && \
     rm -rf /var/lib/apt/lists/*
 
-# Copy uv and installed venv from builder
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 COPY --from=builder /app/.venv /app/.venv
+COPY alembic.ini pyproject.toml ./
+COPY backend ./backend
 
-# Copy project source
-COPY . .
-
-# Use the venv from the build stage
-ENV PATH="/app/.venv/bin:$PATH"
-
-# RSA keys directory (mount as secret in production)
-RUN mkdir -p /app/keys && \
-    chmod +x deploy/docker/entrypoint.sh
-
-# Run as non-root
-RUN useradd -m -u 1000 appuser && chown -R appuser /app
+RUN useradd -m -u 1000 appuser && \
+    mkdir -p /app/keys && \
+    chown -R appuser:appuser /app
 USER appuser
 
 EXPOSE 8000
 
-# entrypoint.sh runs "alembic upgrade head" before starting the server
-ENTRYPOINT ["deploy/docker/entrypoint.sh"]
 CMD ["uvicorn", "backend.app.main:app", \
      "--host", "0.0.0.0", \
      "--port", "8000", \

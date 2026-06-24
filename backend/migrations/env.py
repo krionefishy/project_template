@@ -7,14 +7,15 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from alembic import context
-from backend.shared.settings.config import default_config_path, load_settings
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import create_async_engine
-from backend.storage.pg.database import Base
 
 # --- Register all ORM models here so Alembic can detect schema changes ---
 # Add a new import every time you create a new db_models.py file
 import backend.app.example_domain.db_models  # noqa: F401 - register tables with Base.metadata
+from backend.shared.config import default_config_path, load_settings
+from backend.storage.pg.database import Base
+
 # import backend.app.users.db_models            # noqa: F401
 # import backend.app.orders.db_models           # noqa: F401
 

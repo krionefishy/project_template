@@ -7,10 +7,10 @@ from datetime import UTC, datetime, timedelta
 from fastapi import HTTPException, status
 from jose import jwt
 
-from backend.app.auth.domain import RefreshRequest
-from backend.app.auth.dto import TokenPairDTO
+from backend.app.auth.schemas.domain import RefreshRequest
+from backend.app.auth.schemas.dto import TokenPairDTO
 from backend.app.auth.services import RefreshTokenStore
-from backend.shared.settings.config import Settings
+from backend.shared.config import Settings
 
 
 class RefreshTokenUseCase:
@@ -26,13 +26,10 @@ class RefreshTokenUseCase:
                 detail="Refresh token invalid or expired",
             )
 
-        # Rotate refresh token
         await self.refresh_tokens.revoke(request.refresh_token)
         new_refresh = str(uuid.uuid4())
         await self.refresh_tokens.save(user_id, new_refresh)
 
-        # Issue new access token
-        # TODO: fetch actual user role from DB
         role = "user"
         access_token = self._make_access_token(user_id, role)
 

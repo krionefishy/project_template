@@ -1,7 +1,3 @@
-"""
-Auth request models.
-Frontend encrypts password with RSA public key before sending.
-"""
 import base64
 
 from pydantic import BaseModel, Field, field_validator
@@ -9,17 +5,16 @@ from pydantic import BaseModel, Field, field_validator
 
 class LoginRequest(BaseModel):
     username: str = Field(..., min_length=1)
-    # Base64-encoded RSA-encrypted password from frontend
     encrypted_password: str = Field(..., min_length=1)
 
     @field_validator("encrypted_password")
     @classmethod
-    def validate_base64(cls, v: str) -> str:
+    def validate_base64(cls, value: str) -> str:
         try:
-            base64.b64decode(v)
+            base64.b64decode(value)
         except Exception as exc:
             raise ValueError("encrypted_password must be valid base64") from exc
-        return v
+        return value
 
     def decode_encrypted_password(self) -> bytes:
         return base64.b64decode(self.encrypted_password)

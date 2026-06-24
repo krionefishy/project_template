@@ -5,8 +5,8 @@ from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter, Depends, File, UploadFile
 
 from backend.app.auth.deps import AuthContext, require_auth
-from backend.app.example_domain.domain import CreateExampleRequest
-from backend.app.example_domain.dto import ExampleDTO, ExampleFileDTO
+from backend.app.example_domain.schemas.domain import CreateExampleRequest
+from backend.app.example_domain.schemas.dto import ExampleDTO, ExampleFileDTO
 from backend.app.example_domain.usecases.create_example_usecase import CreateExampleUseCase
 from backend.app.example_domain.usecases.get_example_usecase import GetExampleUseCase
 from backend.app.example_domain.usecases.upload_example_file_usecase import UploadExampleFileUseCase

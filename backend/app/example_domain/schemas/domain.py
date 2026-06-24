@@ -1,12 +1,3 @@
-"""
-Input (request) Pydantic models for example_domain.
-
-Rules:
-- All request bodies live here
-- Validate data here with @field_validator / @model_validator
-- Do NOT put response shapes here — they belong in dto.py
-- Enum types can be imported from db_models.py to stay DRY
-"""
 from pydantic import BaseModel, Field, field_validator
 
 from backend.app.example_domain.db_models import ExampleStatus
@@ -19,8 +10,8 @@ class CreateExampleRequest(BaseModel):
 
     @field_validator("title")
     @classmethod
-    def strip_title(cls, v: str) -> str:
-        stripped = v.strip()
+    def strip_title(cls, value: str) -> str:
+        stripped = value.strip()
         if not stripped:
             raise ValueError("title cannot be blank")
         return stripped

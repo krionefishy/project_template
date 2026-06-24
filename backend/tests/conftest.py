@@ -36,29 +36,21 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from backend.app.api.router import api_router
-from backend.app.auth.deps import AuthContext
 from backend.app.auth.services import PasswordService, RefreshTokenStore, RsaKeyProvider
+from backend.shared.config import Settings, load_settings
 from backend.shared.di.providers.auth import AuthContextProvider, AuthUsecaseProvider
 from backend.shared.di.providers.example_domain import ExampleDomainProvider
 from backend.shared.kafka_streams.producer import KafkaProducerWrapper
-from backend.shared.settings.config import Settings, load_settings
 from backend.storage.pg.database import Base, Database
 from backend.storage.redis.client import RedisClient
 from backend.storage.s3.client import S3Client
 from backend.tests.builder import Builder
 from backend.tests.mocks import FakeKafkaBroker, MockPasswordService, MockRefreshTokenStore, MockS3Client
 
-# ---------------------------------------------------------------------------
-# ContextVar — shares the current test session with Dishka's TestSessionProvider
-# ---------------------------------------------------------------------------
 _current_db_session: ContextVar[AsyncSession | None] = ContextVar(
     "current_test_db_session", default=None
 )
 
-
-# ---------------------------------------------------------------------------
-# xdist: per-worker database URL (db_name_0, db_name_1, ...)
-# ---------------------------------------------------------------------------
 
 def _set_worker_database_url(config) -> None:
     if not hasattr(config, "workerinput") or not config.workerinput:
@@ -84,10 +76,6 @@ def pytest_configure(config):
     _set_worker_database_url(config)
 
 
-# ---------------------------------------------------------------------------
-# Logging
-# ---------------------------------------------------------------------------
-
 @pytest.fixture(scope="session", autouse=True)
 def configure_logging():
     logging.basicConfig(
@@ -95,10 +83,6 @@ def configure_logging():
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
 
-
-# ---------------------------------------------------------------------------
-# Settings
-# ---------------------------------------------------------------------------
 
 @pytest.fixture(scope="session")
 def settings() -> Settings:
@@ -122,10 +106,6 @@ def settings() -> Settings:
 
     return cfg
 
-
-# ---------------------------------------------------------------------------
-# Database engine (session-scoped — one engine for entire test run)
-# ---------------------------------------------------------------------------
 
 @pytest.fixture(scope="session")
 async def db_engine(settings: Settings):
@@ -159,17 +139,9 @@ async def database(settings: Settings, db_engine) -> Database:
     return db
 
 
-# ---------------------------------------------------------------------------
-# Mocks (session-scoped singletons)
-# ---------------------------------------------------------------------------
-
 _mock_password_service = MockPasswordService()
 _mock_refresh_store = MockRefreshTokenStore()
 
-
-# ---------------------------------------------------------------------------
-# FastAPI app with test DI container (session-scoped)
-# ---------------------------------------------------------------------------
 
 @pytest.fixture(scope="session")
 async def application(database: Database, settings: Settings) -> AsyncGenerator[FastAPI]:
@@ -191,7 +163,7 @@ async def application(database: Database, settings: Settings) -> AsyncGenerator[
         kafka_producer = from_context(KafkaProducerWrapper)
 
         @provide
-        def s3_client(self) -> S3Client:
+        def s3_client(self) -> S3Client | None:
             return mock_s3
 
     class TestAuthProvider(Provider):
@@ -232,8 +204,9 @@ async def application(database: Database, settings: Settings) -> AsyncGenerator[
     fastapi_app.include_router(api_router, prefix="/api/v1")
 
     # Register global AppError handler (same as production)
-    from backend.shared.exceptions import AppError
     from fastapi.responses import JSONResponse
+
+    from backend.shared.exceptions import AppError
 
     @fastapi_app.exception_handler(AppError)
     async def app_error_handler(request, exc: AppError) -> JSONResponse:
@@ -262,10 +235,6 @@ async def application(database: Database, settings: Settings) -> AsyncGenerator[
     await container.close()
 
 
-# ---------------------------------------------------------------------------
-# Per-test DB session (SAVEPOINT isolation)
-# ---------------------------------------------------------------------------
-
 @pytest.fixture
 async def db_session(database: Database) -> AsyncGenerator[AsyncSession]:
     """
@@ -291,20 +260,12 @@ async def db_session(database: Database) -> AsyncGenerator[AsyncSession]:
             await transaction.rollback()
 
 
-# ---------------------------------------------------------------------------
-# HTTP client
-# ---------------------------------------------------------------------------
-
 @pytest.fixture
 async def client(application: FastAPI, db_session: AsyncSession) -> AsyncGenerator[AsyncClient]:
     transport = ASGITransport(app=application)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
 
-
-# ---------------------------------------------------------------------------
-# Shared fixtures
-# ---------------------------------------------------------------------------
 
 @pytest.fixture
 def frozen_datetime() -> datetime:
@@ -336,6 +297,7 @@ def bearer_headers(settings: Settings):
     """
     import uuid as _uuid
     from datetime import UTC, timedelta
+
     from jose import jwt
 
     cfg = settings.jwt
@@ -343,10 +305,10 @@ def bearer_headers(settings: Settings):
     def _make(user_id=None, role: str = "user") -> dict[str, str]:
         from datetime import datetime as dt
         uid = str(user_id or _uuid.uuid4())
-        expire = dt.now(UTC) + timedelta(seconds=cfg.access_expire_seconds)
+        expire = dt.now(UTC) + timedelta(minutes=cfg.access_token_expire_minutes)
         token = jwt.encode(
             {"sub": uid, "role": role, "exp": expire},
-            cfg.secret,
+            cfg.secret_key,
             algorithm=cfg.algorithm,
         )
         return {"Authorization": f"Bearer {token}"}

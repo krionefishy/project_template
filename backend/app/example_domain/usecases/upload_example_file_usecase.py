@@ -7,8 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.auth.deps import AuthContext
 from backend.app.example_domain.db_models import ExampleFileModel, ExampleModel, FileStatus
-from backend.app.example_domain.dto import ExampleFileDTO
 from backend.app.example_domain.exceptions import ExampleFileUploadError, ExampleNotFoundError
+from backend.app.example_domain.schemas.dto import ExampleFileDTO
 from backend.shared.kafka_streams.producer import KafkaProducerWrapper
 from backend.shared.kafka_streams.storage_events import publish_s3_upload
 from backend.shared.kafka_streams.topics import StorageTopics

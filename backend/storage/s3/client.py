@@ -49,7 +49,13 @@ class S3Client:
             Metadata={k: v.encode("ascii", errors="replace").decode() for k, v in metadata.items()},
         )
 
-    async def put_object(self, key: str, body: bytes, content_type: str, metadata: dict[str, str] | None = None) -> None:
+    async def put_object(
+        self,
+        key: str,
+        body: bytes,
+        content_type: str,
+        metadata: dict[str, str] | None = None,
+    ) -> None:
         await asyncio.to_thread(self._put_object, key, body, content_type, metadata or {})
 
     def _delete_object(self, key: str) -> None:

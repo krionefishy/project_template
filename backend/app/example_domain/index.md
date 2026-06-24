@@ -12,8 +12,8 @@
 | Файл | Назначение |
 |------|------------|
 | `db_models.py` | SQLAlchemy ORM модели. Только хранение данных, никакой бизнес-логики |
-| `domain.py` | Pydantic модели для **входящих** запросов (request body, query params) |
-| `dto.py` | Pydantic модели для **исходящих** ответов (response_model в роутере) |
+| `schemas/domain.py` | Pydantic модели для **входящих** запросов (request body, query params) |
+| `schemas/dto.py` | Pydantic модели для **исходящих** ответов (response_model в роутере) |
 | `api/routes.py` | FastAPI роутер. Только HTTP-слой: валидация, вызов UseCase, маппинг None → 404 |
 | `usecases/` | Бизнес-логика. Один файл = один UseCase |
 

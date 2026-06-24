@@ -1,12 +1,11 @@
-from fastapi import Request
 from dishka import Provider, Scope, provide
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import Request
 
 from backend.app.auth.deps import AuthContext, build_auth_context
 from backend.app.auth.services import PasswordService, RefreshTokenStore, RsaKeyProvider
 from backend.app.auth.usecases.login_usecase import LoginUseCase
 from backend.app.auth.usecases.refresh_token_usecase import RefreshTokenUseCase
-from backend.shared.settings.config import Settings
+from backend.shared.config import Settings
 from backend.storage.redis.client import RedisClient
 
 
@@ -17,7 +16,7 @@ class AuthProvider(Provider):
 
     @provide(scope=Scope.APP)
     def refresh_token_store(self, redis: RedisClient, settings: Settings) -> RefreshTokenStore:
-        return RefreshTokenStore(redis=redis, expire_days=settings.jwt.refresh_token_expire_days)
+        return RefreshTokenStore(redis=redis, settings=settings)
 
 
 class AuthContextProvider(Provider):

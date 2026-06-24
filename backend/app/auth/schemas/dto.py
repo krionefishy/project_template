@@ -8,4 +8,4 @@ class TokenPairDTO(BaseModel):
 
 
 class PublicKeyDTO(BaseModel):
-    public_key: str  # PEM format, sent to frontend for password encryption
+    public_key: str

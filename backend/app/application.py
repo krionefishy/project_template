@@ -9,12 +9,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from backend.app.api.router import api_router
+from backend.shared.config import Settings, default_config_path, load_settings
 from backend.shared.di.providers.provider import ALL_PROVIDERS
 from backend.shared.exceptions import AppError
 from backend.shared.kafka_streams.kafka import start_kafka, stop_kafka
 from backend.shared.kafka_streams.producer import KafkaProducerWrapper
 from backend.shared.kafka_streams.subscribers import s3_consumers
-from backend.shared.settings.config import Settings, default_config_path, load_settings
 from backend.storage.pg.database import Database
 from backend.storage.redis.client import RedisClient
 from backend.storage.s3.client import S3Client
@@ -23,17 +23,17 @@ from backend.storage.s3.client import S3Client
 class Application:
 
     def __init__(self):
-        self.app: FastAPI = FastAPI(
-            title="App",  # CHANGE: your service name
-            version="1.0.0",
-            lifespan=self.lifespan,
-            docs_url="/api/docs",
-            redoc_url="/api/redoc",
-            openapi_url="/api/openapi.json",
-        )
-        self.db: Database = Database()
         config_path = os.getenv("CONFIG_PATH", str(default_config_path()))
         self.settings: Settings = load_settings(config_path)
+        self.app: FastAPI = FastAPI(
+            title=self.settings.app.service_name,
+            version="1.0.0",
+            lifespan=self.lifespan,
+            docs_url="/api/docs" if self.settings.app.docs_enabled else None,
+            redoc_url="/api/redoc" if self.settings.app.docs_enabled else None,
+            openapi_url="/api/openapi.json" if self.settings.app.docs_enabled else None,
+        )
+        self.db: Database = Database()
         self.redis_client = RedisClient(
             host=self.settings.redis.host,
             port=self.settings.redis.port,
@@ -53,7 +53,7 @@ class Application:
                 Database: self.db,
                 RedisClient: self.redis_client,
                 KafkaProducerWrapper: self.kafka_producer,
-                S3Client: self.s3_client,
+                S3Client | None: self.s3_client,
             },
         )
         self.container = container
@@ -85,10 +85,6 @@ class Application:
     def _setup_exception_handlers(self):
         @self.app.exception_handler(AppError)
         async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
-            """
-            Global handler: converts any AppError subclass → JSON response.
-            Domain exceptions need no try/except in routes.
-            """
             return JSONResponse(
                 status_code=exc.status_code,
                 content={"detail": exc.detail},

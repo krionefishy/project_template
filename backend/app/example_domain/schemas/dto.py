@@ -1,16 +1,7 @@
-"""
-Output (response) Pydantic models for example_domain.
-
-Rules:
-- All API response shapes live here
-- Use model_config = ConfigDict(from_attributes=True) for ORM → DTO mapping
-- Never expose raw DB model attributes directly in API responses
-- Nullable presigned URLs indicate file upload is still pending
-"""
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from backend.app.example_domain.db_models import ExampleStatus, FileStatus
 
@@ -24,7 +15,6 @@ class ExampleFileDTO(BaseModel):
     content_type: str
     status: FileStatus
     created_at: datetime
-    # Presigned URL is generated on demand — not stored in DB
     download_url: str | None = None
 
 
@@ -37,7 +27,7 @@ class ExampleDTO(BaseModel):
     status: ExampleStatus
     created_at: datetime
     updated_at: datetime
-    files: list[ExampleFileDTO] = []
+    files: list[ExampleFileDTO] = Field(default_factory=list)
 
 
 class ExampleListDTO(BaseModel):

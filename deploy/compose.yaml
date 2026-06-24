@@ -1,23 +1,32 @@
-# ============================================================
-# Production stack
-# Usage: just deploy-up
-#
-# All secrets from .env — never hardcode here.
-# CHANGE: replace "app" / "app_db" / "app-group" with your project name.
-# ============================================================
-
 services:
-
   nginx:
     image: nginx:1.27-alpine
     restart: unless-stopped
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - proxy
+    ports:
+      - "80:80"
+      - "443:443"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/internal.conf:/etc/nginx/conf.d/default.conf:ro
+
+  migrate:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    restart: "no"
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      CONFIG_PATH: /app/backend/shared/settings/config.prod.yaml
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - internal
 
   backend:
     build:
@@ -30,8 +39,8 @@ services:
       - proxy
       - internal
     depends_on:
-      db:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
       kafka:
@@ -95,7 +104,7 @@ services:
       - internal
 
   kafka:
-    image: apache/kafka:latest
+    image: apache/kafka:3.9.0
     restart: unless-stopped
     environment:
       KAFKA_NODE_ID: 1
@@ -126,4 +135,4 @@ networks:
     driver: bridge
   internal:
     driver: bridge
-    internal: true  # not exposed to host
+    internal: true

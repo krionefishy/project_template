@@ -13,13 +13,12 @@ from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException, status
 from jose import jwt
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.app.auth.domain import LoginRequest
-from backend.app.auth.dto import TokenPairDTO
+from backend.app.auth.schemas.domain import LoginRequest
+from backend.app.auth.schemas.dto import TokenPairDTO
 from backend.app.auth.services import PasswordService, RefreshTokenStore, RsaKeyProvider
-from backend.shared.settings.config import Settings
+from backend.shared.config import Settings
 
 
 class LoginUseCase:
@@ -38,33 +37,28 @@ class LoginUseCase:
         self.refresh_tokens = refresh_token_store
 
     async def execute(self, request: LoginRequest) -> TokenPairDTO:
-        # 1. Find user (replace UserModel with actual ORM model)
         # result = await self.session.execute(select(UserModel).where(UserModel.username == request.username))
         # user = result.scalar_one_or_none()
         # if user is None:
         #     raise HTTPException(status_code=401, detail="Invalid credentials")
 
-        # 2. Decrypt RSA-encrypted password sent by frontend
         try:
-            plain_password = self.rsa.decrypt(request.decode_encrypted_password()).decode()
+            self.rsa.decrypt(request.decode_encrypted_password()).decode()
         except Exception as exc:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Failed to decrypt password",
             ) from exc
 
-        # 3. Verify password
         # if not self.password_service.verify(plain_password, user.hashed_password):
         #     raise HTTPException(status_code=401, detail="Invalid credentials")
 
-        # 4. Issue tokens (replace user_id / role with actual values)
         user_id = uuid.uuid4()  # replace with user.id
-        role = "user"           # replace with user.role
+        role = "user"  # replace with user.role
 
         access_token = self._make_access_token(user_id, role)
         refresh_token = str(uuid.uuid4())
 
-        # 5. Store refresh token
         await self.refresh_tokens.save(user_id, refresh_token)
 
         return TokenPairDTO(access_token=access_token, refresh_token=refresh_token)
